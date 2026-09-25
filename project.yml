@@ -26,7 +26,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.forgeapp.forge
         PRODUCT_NAME: Forge
         INFOPLIST_KEY_CFBundleDisplayName: Forge
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon.icon
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleIconName: AppIcon
         MARKETING_VERSION: "1.0.0"
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
