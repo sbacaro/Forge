@@ -29,7 +29,10 @@ final class YtDlpDownloader: VideoDownloader {
             if let detection = botDetector.classify(output: result.standardError) {
                 throw DownloadError.botDetected(detection)
             }
-            throw YtDlpError.executionFailed(message: lastMeaningfulLine(result.standardError))
+            throw YtDlpError.executionFailed(
+                message: lastMeaningfulLine(result.standardError)
+                    ?? "yt-dlp exited with code \(result.exitCode)."
+            )
         }
         guard let data = result.standardOutput.data(using: .utf8) else {
             throw YtDlpError.executionFailed(message: "Empty metadata response.")
@@ -50,6 +53,11 @@ final class YtDlpDownloader: VideoDownloader {
         var args = profile.arguments()
         args += ["--no-playlist", "-f", request.qualityProfile.formatSelector]
         args += ["-P", request.outputDirectory.path]
+        // Apps launched from Finder don't inherit the shell PATH; point
+        // yt-dlp at the ffmpeg/ffprobe embedded next to the executable.
+        if let ffmpegURL = toolLocator.url(forTool: .ffmpeg) {
+            args += ["--ffmpeg-location", ffmpegURL.deletingLastPathComponent().path]
+        }
         if let audio = request.audioFormat {
             args += ["-x", "--audio-format", audio.rawValue]
         }
@@ -78,6 +86,10 @@ final class YtDlpDownloader: VideoDownloader {
                     onProgress(progress)
                 } else if Self.staticDetector.classify(output: line) != nil {
                     suspiciousCollector.append(line)
+                } else if line.hasPrefix("ERROR") {
+                    // Keep real failures around for the error report even
+                    // when they don't match a bot-detection pattern.
+                    suspiciousCollector.append(line)
                 }
             }
         }
@@ -87,7 +99,10 @@ final class YtDlpDownloader: VideoDownloader {
             if let detection = Self.staticDetector.classify(output: combined) {
                 throw DownloadError.botDetected(detection)
             }
-            throw YtDlpError.executionFailed(message: lastMeaningfulLine(result.standardError))
+            let message = lastMeaningfulLine(combined)
+                ?? lastMeaningfulLine(result.standardError)
+                ?? "yt-dlp exited with code \(result.exitCode)."
+            throw YtDlpError.executionFailed(message: message)
         }
 
         return try Self.latestMediaFile(in: request.outputDirectory)
@@ -110,10 +125,11 @@ final class YtDlpDownloader: VideoDownloader {
         }
     }
 
-    private func lastMeaningfulLine(_ text: String) -> String {
+    private func lastMeaningfulLine(_ text: String) -> String? {
         text.split(separator: "\n")
             .map(String.init)
-            .last { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? "Unknown yt-dlp failure."
+            .reversed()
+            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
     private static func isWebURL(_ url: URL) -> Bool {

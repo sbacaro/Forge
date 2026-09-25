@@ -24,13 +24,19 @@ final class ProcessEngine: ToolEngine {
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> ToolResult {
         let process = try makeProcess(tool: tool, arguments: arguments, environment: environment)
-        process.standardOutput = Pipe()
-        process.standardError = FileHandle.nullDevice // streaming focuses on stdout progress
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
         try launch(process)
 
-        let pipe = process.standardOutput as! Pipe
         return try await withTaskCancellationHandler {
-            try await readLoop(process: process, pipe: pipe, onOutput: onOutput)
+            try await readLoop(
+                process: process,
+                stdout: stdoutPipe,
+                stderr: stderrPipe,
+                onOutput: onOutput
+            )
         } onCancel: {
             process.terminate()
         }
@@ -89,11 +95,21 @@ final class ProcessEngine: ToolEngine {
 
     private func readLoop(
         process: Process,
-        pipe: Pipe,
+        stdout: Pipe,
+        stderr: Pipe,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> ToolResult {
+        // stderr carries errors and warnings; route it through the same
+        // callback so bot detection and error reporting see everything.
+        stderr.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty, let chunk = String(data: data, encoding: .utf8) {
+                onOutput(chunk)
+            }
+        }
+
         var buffer = Data()
-        pipe.fileHandleForReading.readabilityHandler = { handle in
+        stdout.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if !data.isEmpty, let chunk = String(data: data, encoding: .utf8) {
                 onOutput(chunk)
@@ -104,14 +120,16 @@ final class ProcessEngine: ToolEngine {
             try Task.checkCancellation()
             try await Task.sleep(nanoseconds: UInt64(AppConstants.processReadInterval * 1_000_000_000))
         }
-        pipe.fileHandleForReading.readabilityHandler = nil
+        stdout.fileHandleForReading.readabilityHandler = nil
+        stderr.fileHandleForReading.readabilityHandler = nil
 
-        let remaining = pipe.fileHandleForReading.readDataToEndOfFile()
-        buffer.append(remaining)
+        buffer.append(stdout.fileHandleForReading.readDataToEndOfFile())
+        let remainingStderr = stderr.fileHandleForReading.readDataToEndOfFile()
+
         return ToolResult(
             exitCode: process.terminationStatus,
             standardOutput: String(data: buffer, encoding: .utf8) ?? "",
-            standardError: ""
+            standardError: String(data: remainingStderr, encoding: .utf8) ?? ""
         )
     }
 

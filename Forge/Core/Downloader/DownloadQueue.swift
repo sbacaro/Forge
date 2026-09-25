@@ -83,7 +83,9 @@ final class DownloadQueue {
             task.update(state: .downloading)
 
             let fileURL = try await downloader.download(task.request, using: profile) { progress in
-                MainActor.assumeIsolated {
+                // The streaming callback runs on a background queue; hop to
+                // the main actor instead of assuming we're already there.
+                Task { @MainActor in
                     task.update(progress: progress)
                 }
             }
