@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Download embedded tools
+        run: ./scripts/bootstrap-tools.sh
+
+      - name: Validate embedded tools
+        run: ./scripts/validate-embed.sh
+
+      - name: Build and test
+        run: |
+          xcodebuild -project Forge.xcodeproj \
+            -scheme Forge \
+            -destination 'platform=macOS' \
+            test | xcbeautify
+
+  package:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Bootstrap and validate tools
+        run: |
+          ./scripts/bootstrap-tools.sh
+          ./scripts/validate-embed.sh
+
+      - name: Package self-contained app
+        run: ./scripts/package.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forge-app
+          path: build/Forge.app
