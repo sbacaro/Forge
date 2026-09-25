@@ -42,8 +42,22 @@ final class DownloadTask: Identifiable {
     }
 
     func update(progress newProgress: OutputParser.Progress) {
+        // Byte counts stay exact; the displayed fraction is clamped so the
+        // bar never regresses when the overall total grows (video stream
+        // finishing makes the total jump when the audio size becomes known).
+        if let fraction = newProgress.fraction {
+            highestDisplayedFraction = max(highestDisplayedFraction, fraction)
+        }
         progress = newProgress
     }
+
+    /// Display fraction: byte-exact but clamped to never regress.
+    var displayFraction: Double? {
+        guard let fraction = progress?.fraction else { return nil }
+        return max(highestDisplayedFraction, fraction)
+    }
+
+    @ObservationIgnored private var highestDisplayedFraction: Double = 0
 
     func update(metadata newMetadata: OutputParser.Metadata) {
         metadata = newMetadata

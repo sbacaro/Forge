@@ -231,15 +231,15 @@ private struct TaskRow: View {
                 Spacer()
                 StatusBadge(state: task.state)
             }
-            if let progress = task.progress {
-                ProgressBar(fraction: progress.fraction, label: label(for: progress))
+            if let fraction = task.displayFraction {
+                ProgressBar(fraction: fraction, label: label(for: fraction))
             }
         }
         .padding(.vertical, 4)
     }
 
-    private func label(for progress: OutputParser.Progress) -> String? {
-        guard progress.fraction > 0 else { return nil }
-        return "\(Int((progress.fraction * 100).rounded()))%"
+    private func label(for fraction: Double) -> String? {
+        guard fraction > 0 else { return nil }
+        return "\(Int((fraction * 100).rounded()))%"
     }
 }

@@ -50,6 +50,8 @@ final class YtDlpDownloader: VideoDownloader {
         }
         guard Self.isWebURL(request.url) else { throw DownloadError.invalidURL }
 
+        guard Self.isWebURL(request.url) else { throw DownloadError.invalidURL }
+
         var args = profile.arguments()
         args += ["--no-playlist", "-f", request.qualityProfile.formatSelector]
         args += ["-P", request.outputDirectory.path]
@@ -72,9 +74,11 @@ final class YtDlpDownloader: VideoDownloader {
         if request.embedMetadata {
             args += ["--embed-metadata"]
         }
+        args += OutputParser.progressTemplateArguments
         args += ["--newline", request.url.absoluteString]
 
         let suspiciousCollector = SuspiciousOutputCollector()
+        let aggregator = ProgressAggregator()
         let result = try await toolEngine.runStreaming(
             tool: tool,
             arguments: args,
@@ -82,8 +86,11 @@ final class YtDlpDownloader: VideoDownloader {
         ) { chunk in
             for line in chunk.split(separator: "\n") {
                 let line = String(line)
-                if let progress = Self.staticParser.parseProgress(line: line) {
-                    onProgress(progress)
+                if line.contains("[download] Destination:") {
+                    aggregator.beginNextStream()
+                } else if let raw = Self.staticParser.parseStructuredProgress(line: line) {
+                    let aggregated = aggregator.update(with: raw)
+                    onProgress(aggregated)
                 } else if Self.staticDetector.classify(output: line) != nil {
                     suspiciousCollector.append(line)
                 } else if line.hasPrefix("ERROR") {
@@ -145,7 +152,17 @@ final class YtDlpDownloader: VideoDownloader {
             includingPropertiesForKeys: [.contentModificationDateKey]
         )
         let mediaExtensions: Set<String> = ["mp4", "mkv", "webm", "m4a", "wav", "flac", "aiff", "mp3", "mov", "avi"]
-        let mediaFiles = contents.filter { mediaExtensions.contains($0.pathExtension.lowercased()) }
+        // Skip yt-dlp intermediate files like "video.f137.mp4": the merged
+        // output drops the .fNNN fragment, and picking a partial stream as
+        // the "latest" file made completed downloads look like failures.
+        let partialStreamPattern = try NSRegularExpression(pattern: #"\.f\d+\."#)
+        let isPartial: (URL) -> Bool = { url in
+            let range = NSRange(url.lastPathComponent.startIndex..., in: url.lastPathComponent)
+            return partialStreamPattern.firstMatch(in: url.lastPathComponent, range: range) != nil
+        }
+        let mediaFiles = contents.filter { url in
+            mediaExtensions.contains(url.pathExtension.lowercased()) && !isPartial(url)
+        }
         guard let latest = mediaFiles.sorted(by: { lhs, rhs in
             let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
             let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
