@@ -21,6 +21,28 @@ targets:
     platform: macOS
     sources:
       - path: Forge
+    preBuildScripts: []
+    postBuildScripts:
+      - name: Embed Command-Line Tools
+        # Embeds yt-dlp/ffmpeg/ffprobe next to the executable in EVERY
+        # configuration, so running from Xcode (Debug) is self-contained
+        # too. Re-signs ad-hoc because the copy invalidates signatures.
+        script: |
+          set -e
+          TOOLS_SRC="${SRCROOT}/Tools"
+          TOOLS_DST="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS"
+          mkdir -p "${TOOLS_DST}"
+          for tool in yt-dlp ffmpeg ffprobe; do
+            if [ ! -f "${TOOLS_SRC}/${tool}" ]; then
+              echo "error: Missing ${TOOLS_SRC}/${tool}. Run scripts/bootstrap-tools.sh first." >&2
+              exit 1
+            fi
+            cp -f "${TOOLS_SRC}/${tool}" "${TOOLS_DST}/${tool}"
+          done
+          codesign --force --sign - "${TOOLS_DST}/yt-dlp" "${TOOLS_DST}/ffmpeg" "${TOOLS_DST}/ffprobe" 2>/dev/null || true
+        basedOnDependencyAnalysis: false
+        outputPath: |
+          $(BUILT_PRODUCTS_DIR)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.forgeapp.forge
