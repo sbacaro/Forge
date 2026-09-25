@@ -62,20 +62,27 @@ cp "${temp_dir}/yt-dlp_macos" "${TOOLS_DIR}/yt-dlp"
 xattr -d com.apple.quarantine "${TOOLS_DIR}/yt-dlp" 2>/dev/null || true
 
 # --- ffmpeg / ffprobe --------------------------------------------------------
-for tool_name in ffmpeg ffprobe; do
-    echo "Downloading ${tool_name}"
-    fetch_var="${tool_name^^}_URL"
-    fetch "${!fetch_var}" "${temp_dir}/${tool_name}.zip"
-    unzip -oq "${temp_dir}/${tool_name}.zip" -d "${temp_dir}/${tool_name}"
-    bin_path="$(find "${temp_dir}/${tool_name}" -type f -name "${tool_name}" | head -1)"
-    if [[ -z "${bin_path}" ]]; then
-        echo "Could not locate ${tool_name} inside the downloaded zip." >&2
-        exit 1
-    fi
-    chmod +x "${bin_path}"
-    cp "${bin_path}" "${TOOLS_DIR}/${tool_name}"
-    xattr -d com.apple.quarantine "${TOOLS_DIR}/${tool_name}" 2>/dev/null || true
-done
+fetch "${FFMPEG_URL}" "${temp_dir}/ffmpeg.zip"
+unzip -oq "${temp_dir}/ffmpeg.zip" -d "${temp_dir}/ffmpeg"
+bin_path="$(find "${temp_dir}/ffmpeg" -type f -name ffmpeg | head -1)"
+if [[ -z "${bin_path}" ]]; then
+    echo "Could not locate ffmpeg inside the downloaded zip." >&2
+    exit 1
+fi
+chmod +x "${bin_path}"
+cp "${bin_path}" "${TOOLS_DIR}/ffmpeg"
+xattr -d com.apple.quarantine "${TOOLS_DIR}/ffmpeg" 2>/dev/null || true
+
+fetch "${FFPROBE_URL}" "${temp_dir}/ffprobe.zip"
+unzip -oq "${temp_dir}/ffprobe.zip" -d "${temp_dir}/ffprobe"
+bin_path="$(find "${temp_dir}/ffprobe" -type f -name ffprobe | head -1)"
+if [[ -z "${bin_path}" ]]; then
+    echo "Could not locate ffprobe inside the downloaded zip." >&2
+    exit 1
+fi
+chmod +x "${bin_path}"
+cp "${bin_path}" "${TOOLS_DIR}/ffprobe"
+xattr -d com.apple.quarantine "${TOOLS_DIR}/ffprobe" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 echo
