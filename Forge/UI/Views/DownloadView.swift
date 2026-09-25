@@ -17,6 +17,7 @@ struct DownloadView: View {
             taskList
         }
         .navigationTitle("Downloads")
+        .onAppear { appModel.clipboardMonitor.start() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Add", systemImage: "arrow.down.to.line") {
@@ -90,6 +91,24 @@ struct DownloadView: View {
                 }
             }
 
+            Picker("Playlist", selection: Binding(
+                get: { appModel.lastSelectedPlaylistScope },
+                set: { appModel.lastSelectedPlaylistScope = $0 }
+            )) {
+                ForEach(PlaylistScope.allCases) { scope in
+                    Text(scope.displayName).tag(scope)
+                }
+            }
+
+            Toggle("Embed thumbnail and metadata", isOn: Binding(
+                get: { appModel.embedMetadata },
+                set: { appModel.embedMetadata = $0 }
+            ))
+            Toggle("Download subtitles", isOn: Binding(
+                get: { appModel.downloadSubtitles },
+                set: { appModel.downloadSubtitles = $0 }
+            ))
+
             HStack {
                 Image(systemName: "folder")
                 Text(self.appModel.outputDirectory.lastPathComponent)
@@ -124,23 +143,58 @@ struct DownloadView: View {
         .listStyle(.inset)
         .overlay {
             if appModel.downloadQueue.tasks.isEmpty {
-                ContentUnavailableView(
-                    "No downloads",
-                    systemImage: "arrow.down.circle",
-                    description: Text("Paste a URL above and press Add to get started.")
-                )
+                emptyState
             }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if let url = appModel.clipboardMonitor.detectedURL {
+            VStack(spacing: 12) {
+                Image(systemName: "arrow.down.circle")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+                Text("Found a URL in your clipboard")
+                    .font(.headline)
+                Button("Download from \(url.host() ?? "link")") {
+                    urlString = url.absoluteString
+                    submit()
+                    appModel.clipboardMonitor.consume()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        } else {
+            ContentUnavailableView(
+                "No downloads",
+                systemImage: "arrow.down.circle",
+                description: Text("Paste a URL above and press Add to get started.")
+            )
         }
     }
 
     private func submit() {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespaces)) else { return }
+        let subtitleOptions: SubtitleOptions = appModel.downloadSubtitles
+            ? SubtitleOptions(
+                enabled: true,
+                languages: appModel.subtitleLanguages
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty },
+                embed: true
+            )
+            : .disabled
         let request = DownloadRequest(
             url: url,
             audioFormat: isAudioOutput ? appModel.lastSelectedAudioFormat : nil,
             videoFormat: isAudioOutput ? nil : appModel.lastSelectedVideoFormat,
             qualityProfile: appModel.lastSelectedQuality,
-            outputDirectory: appModel.outputDirectory
+            outputDirectory: appModel.outputDirectory,
+            playlistScope: appModel.lastSelectedPlaylistScope,
+            subtitleOptions: subtitleOptions,
+            embedThumbnail: appModel.embedMetadata,
+            embedMetadata: appModel.embedMetadata
         )
         appModel.downloadQueue.enqueue(request)
         urlString = ""

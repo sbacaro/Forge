@@ -13,12 +13,16 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Extraction", systemImage: "shield.lefthalf.filled")
                 }
+            AudioQualityForm()
+                .tabItem {
+                    Label("Audio Quality", systemImage: "waveform")
+                }
             GeneralSettingsForm()
                 .tabItem {
                     Label("General", systemImage: "gearshape")
                 }
         }
-        .frame(width: 480, height: 360)
+        .frame(width: 480, height: 420)
     }
 }
 
@@ -67,6 +71,55 @@ private struct ExtractionSettingsForm: View {
             ))
         }
         .padding()
+    }
+}
+
+private struct AudioQualityForm: View {
+    @Environment(AppModel.self) private var appModel
+
+    @State private var audioBitrateKbps: Int
+    @State private var sampleRateHz: Int
+
+    private let bitrateOptions = [128, 192, 256, 320]
+    private let sampleRates = [
+        (44_100, "44.1 kHz (CD)"),
+        (48_000, "48 kHz"),
+        (88_200, "88.2 kHz"),
+        (96_000, "96 kHz"),
+        (192_000, "192 kHz"),
+    ]
+
+    init() {
+        let storedBitrate = UserDefaults.standard.integer(forKey: "audioBitrateKbps")
+        audioBitrateKbps = storedBitrate == 0 ? 320 : storedBitrate
+        let storedRate = UserDefaults.standard.integer(forKey: "sampleRateHz")
+        sampleRateHz = storedRate == 0 ? 48_000 : storedRate
+    }
+
+    var body: some View {
+        Form {
+            Picker("MP3 bitrate", selection: $audioBitrateKbps) {
+                ForEach(bitrateOptions, id: \.self) { option in
+                    Text("\(option) kbps").tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker("Sample rate", selection: $sampleRateHz) {
+                ForEach(sampleRates, id: \.0) { rate, label in
+                    Text(label).tag(rate)
+                }
+            }
+
+            Text("Applies to lossy formats (MP3) and resampling. Lossless formats keep the source quality.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .onDisappear {
+            UserDefaults.standard.set(audioBitrateKbps, forKey: "audioBitrateKbps")
+            UserDefaults.standard.set(sampleRateHz, forKey: "sampleRateHz")
+        }
     }
 }
 

@@ -21,15 +21,13 @@ targets:
     platform: macOS
     sources:
       - path: Forge
-    resources:
-      - path: Forge/Resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.forgeapp.forge
         PRODUCT_NAME: Forge
         INFOPLIST_KEY_CFBundleDisplayName: Forge
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities

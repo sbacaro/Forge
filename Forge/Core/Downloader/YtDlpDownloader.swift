@@ -56,6 +56,14 @@ final class YtDlpDownloader: VideoDownloader {
         if let video = request.videoFormat {
             args += ["--merge-output-format", video.rawValue]
         }
+        args += request.playlistScope.ytDlpArguments
+        args += request.subtitleOptions.ytDlpArguments
+        if request.embedThumbnail {
+            args += ["--embed-thumbnail"]
+        }
+        if request.embedMetadata {
+            args += ["--embed-metadata"]
+        }
         args += ["--newline", request.url.absoluteString]
 
         let suspiciousCollector = SuspiciousOutputCollector()

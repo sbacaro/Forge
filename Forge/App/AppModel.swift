@@ -22,6 +22,16 @@ final class AppModel {
         set { store(newValue, key: "lastSelectedQuality") }
     }
 
+    @ObservationIgnored var lastSelectedPlaylistScope: PlaylistScope {
+        get { stored(PlaylistScope.self, key: "lastSelectedPlaylistScope") ?? .single }
+        set { store(newValue, key: "lastSelectedPlaylistScope") }
+    }
+
+    var downloadSubtitles = false
+
+    /// Watches the pasteboard for copied media URLs.
+    let clipboardMonitor: ClipboardMonitor
+
     var outputDirectory: URL {
         get {
             if let raw = UserDefaults.standard.string(forKey: "outputDirectory"),
@@ -36,6 +46,15 @@ final class AppModel {
     /// Set to true when some view should present the Settings scene.
     var shouldPresentSettings = false
 
+    /// Subtitle language tags used when the user enables subtitles.
+    var subtitleLanguages: String {
+        get { UserDefaults.standard.string(forKey: "subtitleLanguages") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "subtitleLanguages") }
+    }
+
+    var embedThumbnail = true
+    var embedMetadata = true
+
     @MainActor
     init(
         downloadQueue: DownloadQueue? = nil,
@@ -44,6 +63,7 @@ final class AppModel {
     ) {
         self.extractionSettings = extractionSettings
         self.historyStore = historyStore
+        self.clipboardMonitor = ClipboardMonitor()
         self.downloadQueue = downloadQueue ?? DownloadQueue(
             downloader: YtDlpDownloader(),
             throttle: RateThrottle(),
