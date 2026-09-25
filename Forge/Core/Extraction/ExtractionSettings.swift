@@ -56,7 +56,9 @@ final class ExtractionSettings {
         }
 
         if !acceptLanguage.isEmpty {
-            args += ["--accept-language", acceptLanguage]
+            // yt-dlp has no --accept-language flag; the header form works
+            // across all versions.
+            args += ["--add-headers", "Accept-Language: \(acceptLanguage)"]
         }
 
         for header in customHeaders where !header.isEmpty {

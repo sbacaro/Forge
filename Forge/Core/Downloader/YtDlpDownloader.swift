@@ -102,7 +102,9 @@ final class YtDlpDownloader: VideoDownloader {
             let message = lastMeaningfulLine(combined)
                 ?? lastMeaningfulLine(result.standardError)
                 ?? "yt-dlp exited with code \(result.exitCode)."
-            throw YtDlpError.executionFailed(message: message)
+            throw YtDlpError.executionFailed(
+                message: "\(message) [exit \(result.exitCode); args: \(args.joined(separator: " "))]"
+            )
         }
 
         return try Self.latestMediaFile(in: request.outputDirectory)
