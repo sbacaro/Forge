@@ -51,6 +51,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleIconName: AppIcon
         MARKETING_VERSION: "1.0.0"
+        CODE_SIGN_ENTITLEMENTS: Forge/Forge.entitlements
         CODE_SIGN_IDENTITY: "-"
         ENABLE_HARDENED_RUNTIME: YES
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
@@ -58,7 +59,7 @@ targets:
         DEAD_CODE_STRIPPING: YES
     dependencies:
       - target: ForgeKit
-        embed: false
+        embed: true
   ForgeKit:
     type: framework
     platform: macOS
