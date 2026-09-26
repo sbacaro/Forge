@@ -71,11 +71,18 @@ enum TaskState: Equatable {
     case queued
     case fetchingMetadata
     case downloading
-    case converting
+    case converting(processor: String?)
     case completed
     case failed(reason: String)
     case pausedForUserAction(reason: String)
     case cancelled
+
+    var isActive: Bool {
+        switch self {
+        case .queued, .fetchingMetadata, .downloading, .converting: true
+        default: false
+        }
+    }
 }
 
 /// Errors thrown by downloader implementations.
@@ -110,12 +117,18 @@ enum DownloadError: Error, LocalizedError {
 /// (yt-dlp today, others tomorrow) can be swapped and mocked in tests.
 protocol VideoDownloader: AnyObject, Sendable {
     /// Fetches metadata for a URL without downloading anything.
+    /// The metadata fetch runs inside `operation`, so cancelling that task
+    /// also terminates the underlying yt-dlp subprocess.
     func fetchMetadata(for url: URL, using profile: ExtractionProfile) async throws -> OutputParser.Metadata
 
     /// Downloads the media described by `request`, reporting progress.
+    /// Progress events fire on a background queue; `DownloadQueue` hops
+    /// them to the main actor. Cancelling the surrounding task terminates
+    /// the yt-dlp subprocess.
     func download(
         _ request: DownloadRequest,
         using profile: ExtractionProfile,
-        onProgress: @escaping @Sendable (OutputParser.Progress) -> Void
+        onProgress: @escaping @Sendable (OutputParser.Progress) -> Void,
+        onPostprocess: @escaping @Sendable (OutputParser.PostprocessEvent) -> Void
     ) async throws -> URL
 }

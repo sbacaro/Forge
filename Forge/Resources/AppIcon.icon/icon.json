@@ -1,15 +1,8 @@
 {
-  "features" : [
-    "refractivity",
-    "specular-location"
-  ],
   "fill-specializations" : [
     {
       "value" : {
-        "linear-gradient" : [
-          "extended-srgb:0.29000,0.28000,0.33000,1.00000",
-          "extended-srgb:0.15000,0.13000,0.18000,1.00000"
-        ]
+        "automatic-gradient" : "display-p3:0.23434,0.14516,0.00050,1.00000"
       }
     },
     {
@@ -24,28 +17,20 @@
   ],
   "groups" : [
     {
-      "name" : "Forge Mark",
       "layers" : [
         {
-          "name" : "Hammer",
-          "image-name" : "hammer.svg",
-          "glass" : true,
-          "fill-specializations" : [
-            {
-              "value" : {
-                "solid" : "extended-srgb:1.00000,0.62353,0.03922,1.00000"
-              }
-            },
-            {
-              "appearance" : "dark",
-              "value" : {
-                "solid" : "extended-srgb:1.00000,0.52941,0.00000,1.00000"
-              }
-            }
-          ],
-          "specular" : true
+          "image-name" : "Image 2.svg",
+          "name" : "Image 2",
+          "position" : {
+            "scale" : 8.28,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
+      "name" : "Forge Mark",
       "shadow" : {
         "kind" : "layer-color",
         "opacity" : 0.5

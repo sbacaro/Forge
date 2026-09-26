@@ -75,14 +75,20 @@ final class ProcessEngine: ToolEngine {
         process.standardError = stderrPipe
         try launch(process)
 
+        // Both pipes MUST be drained concurrently. Reading stdout to EOF
+        // before touching stderr deadlocks whenever the child writes more
+        // than the 64 KiB OS pipe buffer to stderr while stdout is still
+        // open: the child blocks on stderr, stdout never reaches EOF, and
+        // the first read waits forever. (Verified experimentally.)
         return try await withTaskCancellationHandler {
-            let stdout = try await collectData(stdoutPipe)
-            let stderr = try await collectData(stderrPipe)
+            async let stdout = collectData(stdoutPipe)
+            async let stderr = collectData(stderrPipe)
+            let (out, err) = try await (stdout, stderr)
             process.waitUntilExit()
             return ToolResult(
                 exitCode: process.terminationStatus,
-                standardOutput: String(data: stdout, encoding: .utf8) ?? "",
-                standardError: String(data: stderr, encoding: .utf8) ?? ""
+                standardOutput: String(data: out, encoding: .utf8) ?? "",
+                standardError: String(data: err, encoding: .utf8) ?? ""
             )
         } onCancel: {
             process.terminate()

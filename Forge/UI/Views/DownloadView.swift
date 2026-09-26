@@ -49,6 +49,18 @@ struct DownloadView: View {
         return url.scheme?.hasPrefix("http") == true && url.host != nil
     }
 
+    /// The currently selected output format; used to gate the thumbnail
+    /// toggle since WAV/AIFF/AVI cannot carry embedded cover art.
+    private var selectedFormatName: String {
+        isAudioOutput ? appModel.lastSelectedAudioFormat.displayName : appModel.lastSelectedVideoFormat.displayName
+    }
+
+    private var selectedFormatSupportsThumbnails: Bool {
+        isAudioOutput
+            ? appModel.lastSelectedAudioFormat.supportsEmbeddedThumbnails
+            : appModel.lastSelectedVideoFormat.supportsEmbeddedThumbnails
+    }
+
     private var urlEntrySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             TextField(text: $urlString) {
@@ -104,6 +116,11 @@ struct DownloadView: View {
                 get: { appModel.embedMetadata },
                 set: { appModel.embedMetadata = $0 }
             ))
+            .disabled(!selectedFormatSupportsThumbnails)
+            .help(selectedFormatSupportsThumbnails
+                ? "Embed cover art and tags into the output file"
+                : "\(selectedFormatName) cannot embed thumbnails")
+
             Toggle("Download subtitles", isOn: Binding(
                 get: { appModel.downloadSubtitles },
                 set: { appModel.downloadSubtitles = $0 }
@@ -127,6 +144,10 @@ struct DownloadView: View {
             Text("Queue")
                 .font(.headline)
             Spacer()
+            Button("Cancel all") {
+                appModel.downloadQueue.cancelAll()
+            }
+            .disabled(!appModel.downloadQueue.tasks.contains { $0.state.isActive })
             Button("Clear finished") {
                 appModel.downloadQueue.clearFinished()
             }
@@ -138,7 +159,9 @@ struct DownloadView: View {
 
     private var taskList: some View {
         List(appModel.downloadQueue.tasks) { task in
-            TaskRow(task: task)
+            TaskRow(task: task) {
+                appModel.downloadQueue.cancel(task.id)
+            }
         }
         .listStyle(.inset)
         .overlay {
@@ -216,6 +239,7 @@ struct DownloadView: View {
 
 private struct TaskRow: View {
     let task: DownloadTask
+    var onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -229,17 +253,85 @@ private struct TaskRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                cancelButton
                 StatusBadge(state: task.state)
             }
-            if let fraction = task.displayFraction {
-                ProgressBar(fraction: fraction, label: label(for: fraction))
+            if case let .failed(reason) = task.state {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
             }
+            if case let .pausedForUserAction(reason) = task.state {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+            }
+            stageProgress
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var cancelButton: some View {
+        if task.isTerminal {
+            EmptyView()
+        } else if task.isCancelling {
+            ProgressView()
+                .controlSize(.mini)
+        } else {
+            Button(role: .destructive, action: onCancel) {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .help("Cancel this download")
+        }
+    }
+
+    /// One determinate (or indeterminate) bar per pipeline stage. Queued
+    /// shows nothing; fetching is indeterminate; downloading shows the
+    /// byte-exact percent; converting shows the active postprocessor.
+    @ViewBuilder
+    private var stageProgress: some View {
+        switch task.state {
+        case .fetchingMetadata:
+            HStack(spacing: 6) {
+                IndeterminateBar(label: "Fetching info")
+            }
+        case .downloading:
+            if let fraction = task.displayFraction {
+                ProgressBar(fraction: fraction, label: label(for: fraction))
+            } else {
+                IndeterminateBar(label: "Starting download")
+            }
+        case let .converting(processor):
+            IndeterminateBar(label: processor.map { "Converting (\($0))" } ?? "Converting")
+        default:
+            EmptyView()
+        }
     }
 
     private func label(for fraction: Double) -> String? {
         guard fraction > 0 else { return nil }
         return "\(Int((fraction * 100).rounded()))%"
+    }
+}
+
+/// Small indeterminate bar with a caption, mirroring `ProgressBar` layout
+/// for stages where yt-dlp reports no byte counts.
+private struct IndeterminateBar: View {
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ProgressView()
+                .progressViewStyle(.linear)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }

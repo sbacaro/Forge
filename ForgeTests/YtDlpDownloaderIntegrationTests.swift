@@ -17,7 +17,12 @@ final class YtDlpDownloaderIntegrationTests: XCTestCase {
             outputDirectory: outputDir
         )
 
-        let fileURL = try await downloader.download(request, using: DefaultExtractionProfile(settings: ExtractionSettings())) { _ in }
+        let fileURL = try await downloader.download(
+            request,
+            using: DefaultExtractionProfile(settings: ExtractionSettings()),
+            onProgress: { _ in },
+            onPostprocess: { _ in }
+        )
         XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
     }
 }

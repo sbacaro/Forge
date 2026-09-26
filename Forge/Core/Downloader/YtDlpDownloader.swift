@@ -43,17 +43,16 @@ final class YtDlpDownloader: VideoDownloader {
     func download(
         _ request: DownloadRequest,
         using profile: ExtractionProfile,
-        onProgress: @escaping @Sendable (OutputParser.Progress) -> Void
+        onProgress: @escaping @Sendable (OutputParser.Progress) -> Void,
+        onPostprocess: @escaping @Sendable (OutputParser.PostprocessEvent) -> Void
     ) async throws -> URL {
         guard let tool = toolLocator.url(forTool: .ytDlp) else {
             throw DownloadError.toolMissing(name: BundledTool.ytDlp.rawValue)
         }
         guard Self.isWebURL(request.url) else { throw DownloadError.invalidURL }
 
-        guard Self.isWebURL(request.url) else { throw DownloadError.invalidURL }
-
         var args = profile.arguments()
-        args += ["--no-playlist", "-f", request.qualityProfile.formatSelector]
+        args += ["-f", request.qualityProfile.formatSelector]
         args += ["-P", request.outputDirectory.path]
         // Apps launched from Finder don't inherit the shell PATH; point
         // yt-dlp at the ffmpeg/ffprobe embedded next to the executable.
@@ -68,13 +67,18 @@ final class YtDlpDownloader: VideoDownloader {
         }
         args += request.playlistScope.ytDlpArguments
         args += request.subtitleOptions.ytDlpArguments
-        if request.embedThumbnail {
+        // Thumbnail embedding is only valid for some containers; passing it
+        // for WAV/AIFF/AVI makes yt-dlp fail during postprocessing.
+        let containerSupportsThumbnails = request.audioFormat?.supportsEmbeddedThumbnails
+            ?? request.videoFormat?.supportsEmbeddedThumbnails ?? false
+        if request.embedThumbnail, containerSupportsThumbnails {
             args += ["--embed-thumbnail"]
         }
         if request.embedMetadata {
             args += ["--embed-metadata"]
         }
         args += OutputParser.progressTemplateArguments
+        args += OutputParser.postprocessTemplateArguments
         args += ["--newline", request.url.absoluteString]
 
         let suspiciousCollector = SuspiciousOutputCollector()
@@ -88,6 +92,8 @@ final class YtDlpDownloader: VideoDownloader {
                 let line = String(line)
                 if line.contains("[download] Destination:") {
                     aggregator.beginNextStream()
+                } else if let event = Self.staticParser.parsePostprocessEvent(line: line) {
+                    onPostprocess(event)
                 } else if let raw = Self.staticParser.parseStructuredProgress(line: line) {
                     let aggregated = aggregator.update(with: raw)
                     onProgress(aggregated)

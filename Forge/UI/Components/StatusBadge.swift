@@ -20,7 +20,12 @@ struct StatusBadge: View {
         case .queued: "Queued"
         case .fetchingMetadata: "Fetching"
         case .downloading: "Downloading"
-        case .converting: "Converting"
+        case let .converting(processor):
+            if let processor {
+                "Converting · \(processor)"
+            } else {
+                "Converting"
+            }
         case .completed: "Done"
         case .failed: "Failed"
         case .pausedForUserAction: "Action needed"

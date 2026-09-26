@@ -29,6 +29,16 @@ enum AudioFormat: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// Whether yt-dlp can embed a thumbnail into this container.
+    /// Unsupported formats make `--embed-thumbnail` abort the postprocessing
+    /// step and fail the whole download.
+    var supportsEmbeddedThumbnails: Bool {
+        switch self {
+        case .mp3, .flac: true
+        case .wav, .aiff: false
+        }
+    }
+
     /// ffmpeg codec name for the output container.
     var codecName: String {
         switch self {

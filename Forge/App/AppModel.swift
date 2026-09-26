@@ -67,7 +67,8 @@ final class AppModel {
         self.downloadQueue = downloadQueue ?? DownloadQueue(
             downloader: YtDlpDownloader(),
             throttle: RateThrottle(),
-            historyStore: historyStore
+            historyStore: historyStore,
+            extractionSettings: extractionSettings
         )
     }
 

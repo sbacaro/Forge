@@ -1,7 +1,5 @@
 import Foundation
 
-import Foundation
-
 /// Observable state for a single download task, suitable for direct
 /// binding from SwiftUI views.
 @MainActor
@@ -12,6 +10,10 @@ final class DownloadTask: Identifiable {
     private(set) var state: TaskState
     private(set) var progress: OutputParser.Progress?
     private(set) var metadata: OutputParser.Metadata?
+
+    /// True between the user pressing Cancel and the subprocess actually
+    /// terminating; lets the UI show a "Cancelling…" state on the button.
+    var isCancelling = false
 
     /// Alert to show when the task needs the user to act (e.g. bot check).
     var userActionMessage: String?
@@ -31,6 +33,9 @@ final class DownloadTask: Identifiable {
 
     func update(state newState: TaskState) {
         state = newState
+        if !newState.isActive {
+            isCancelling = false
+        }
         switch newState {
         case let .pausedForUserAction(reason):
             userActionMessage = reason
@@ -49,6 +54,16 @@ final class DownloadTask: Identifiable {
             highestDisplayedFraction = max(highestDisplayedFraction, fraction)
         }
         progress = newProgress
+    }
+
+    /// Called when yt-dlp enters or leaves a postprocessing step
+    /// (ExtractAudio, EmbedThumbnail, MoveFiles…).
+    func update(postprocess event: OutputParser.PostprocessEvent) {
+        if event.isFinished {
+            state = .converting(processor: nil)
+        } else {
+            state = .converting(processor: event.postprocessor)
+        }
     }
 
     /// Display fraction: byte-exact but clamped to never regress.

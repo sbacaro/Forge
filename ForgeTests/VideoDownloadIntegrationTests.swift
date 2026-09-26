@@ -30,11 +30,16 @@ final class YtDlpProgressTests: XCTestCase {
         )
 
         let collector = ProgressCollector()
-        let fileURL = try await downloader.download(request, using: DefaultExtractionProfile(settings: ExtractionSettings())) { progress in
-            if let fraction = progress.fraction {
-                collector.append(fraction)
-            }
-        }
+        let fileURL = try await downloader.download(
+            request,
+            using: DefaultExtractionProfile(settings: ExtractionSettings()),
+            onProgress: { progress in
+                if let fraction = progress.fraction {
+                    collector.append(fraction)
+                }
+            },
+            onPostprocess: { _ in }
+        )
         XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
         print("FRACTIONS: \(collector.snapshot.map { "\($0)" }.joined(separator: ","))")
     }

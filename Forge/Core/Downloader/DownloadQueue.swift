@@ -11,20 +11,26 @@ final class DownloadQueue {
     private let downloader: VideoDownloader
     private let throttle: RateThrottle
     private let historyStore: HistoryStore
+    private let extractionSettings: ExtractionSettings
     private var drainTask: Task<Void, Never>?
+    /// Swift task running each active download, keyed by task id. Cancelling
+    /// it propagates into `ProcessEngine`, which terminates the subprocess.
+    private var runningTasks: [UUID: Task<Void, Never>] = [:]
 
     init(
         downloader: VideoDownloader = YtDlpDownloader(),
         throttle: RateThrottle = RateThrottle(),
-        historyStore: HistoryStore = JSONHistoryStore()
+        historyStore: HistoryStore = JSONHistoryStore(),
+        extractionSettings: ExtractionSettings = ExtractionSettings()
     ) {
         self.downloader = downloader
         self.throttle = throttle
         self.historyStore = historyStore
+        self.extractionSettings = extractionSettings
     }
 
     var activeTask: DownloadTask? {
-        tasks.first { !$0.isTerminal && isActive($0.state) }
+        tasks.first { $0.state.isActive }
     }
 
     func enqueue(_ request: DownloadRequest) {
@@ -32,9 +38,26 @@ final class DownloadQueue {
         startIfIdle()
     }
 
+    /// Cancels a task. For queued tasks this marks them immediately; for the
+    /// running task it cancels the Swift task, which terminates the yt-dlp
+    /// subprocess and flows back through the error handling below.
     func cancel(_ id: UUID) {
         guard let task = tasks.first(where: { $0.id == id }) else { return }
-        task.update(state: .cancelled)
+        switch task.state {
+        case .queued:
+            task.update(state: .cancelled)
+        case .fetchingMetadata, .downloading, .converting:
+            task.isCancelling = true
+            runningTasks[id]?.cancel()
+        default:
+            break
+        }
+    }
+
+    func cancelAll() {
+        for task in tasks where task.state.isActive {
+            cancel(task.id)
+        }
     }
 
     func clearFinished() {
@@ -44,13 +67,6 @@ final class DownloadQueue {
     func dismissUserActionMessages() {
         for task in tasks where task.userActionMessage != nil {
             task.userActionMessage = nil
-        }
-    }
-
-    private func isActive(_ state: TaskState) -> Bool {
-        switch state {
-        case .queued, .fetchingMetadata, .downloading, .converting: true
-        default: false
         }
     }
 
@@ -66,6 +82,7 @@ final class DownloadQueue {
         while let next = firstQueued() {
             guard !Task.isCancelled else { break }
             await throttle.waitTurn()
+            guard !next.isTerminal else { continue }
             await run(next)
         }
     }
@@ -75,20 +92,40 @@ final class DownloadQueue {
     }
 
     private func run(_ task: DownloadTask) async {
+        let work = Task<Void, Never> { [weak self] in
+            await self?.perform(task)
+        }
+        runningTasks[task.id] = work
+        await work.value
+        runningTasks[task.id] = nil
+    }
+
+    private func perform(_ task: DownloadTask) async {
         task.update(state: .fetchingMetadata)
         do {
-            let profile = DefaultExtractionProfile(settings: ExtractionSettings())
+            // Resolve the user's extraction settings on the main actor and
+            // snapshot the flags into a Sendable profile for background work.
+            let profile = ResolvedExtractionProfile(arguments: extractionSettings.extractionArguments())
             let metadata = try await downloader.fetchMetadata(for: task.request.url, using: profile)
             task.update(metadata: metadata)
             task.update(state: .downloading)
 
-            let fileURL = try await downloader.download(task.request, using: profile) { progress in
-                // The streaming callback runs on a background queue; hop to
-                // the main actor instead of assuming we're already there.
-                Task { @MainActor in
-                    task.update(progress: progress)
+            let fileURL = try await downloader.download(
+                task.request,
+                using: profile,
+                onProgress: { progress in
+                    // The streaming callback runs on a background queue; hop
+                    // to the main actor instead of assuming we're already there.
+                    Task { @MainActor in
+                        task.update(progress: progress)
+                    }
+                },
+                onPostprocess: { event in
+                    Task { @MainActor in
+                        task.update(postprocess: event)
+                    }
                 }
-            }
+            )
             task.update(state: .completed)
             let entry = HistoryEntry(
                 title: metadata.title ?? fileURL.lastPathComponent,
@@ -110,7 +147,11 @@ final class DownloadQueue {
         } catch is CancellationError {
             task.update(state: .cancelled)
         } catch {
-            task.update(state: .failed(reason: error.localizedDescription))
+            if task.isCancelling || Task.isCancelled {
+                task.update(state: .cancelled)
+            } else {
+                task.update(state: .failed(reason: error.localizedDescription))
+            }
         }
     }
 }

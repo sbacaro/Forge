@@ -35,11 +35,27 @@ struct OutputParser: Sendable {
         }
     }
 
+    /// Postprocessing stage event, emitted by the `postprocess:` progress
+    /// template. yt-dlp fires "started"/"finished" pairs per postprocessor
+    /// (e.g. ExtractAudio, EmbedThumbnail, MoveFiles).
+    struct PostprocessEvent: Equatable, Sendable {
+        let status: String
+        let postprocessor: String?
+
+        var isFinished: Bool { status == "finished" }
+    }
+
     /// Template passed to yt-dlp so every progress line is byte-exact:
     /// `PROG|<downloaded>|<total>|<total_estimate>|<speed>` ("NA" = absent).
     static let progressTemplate = "download:PROG|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s"
     static let progressTemplateArguments = ["--progress-template", progressTemplate]
+    /// Postprocessing progress template. The postprocessor hooks carry no
+    /// byte counts, but naming the active step lets the UI show which stage
+    /// of postprocessing is running (ExtractAudio, EmbedThumbnail, MoveFiles…).
+    static let postprocessTemplate = "postprocess:POST|%(progress.status)s|%(progress.postprocessor)s"
+    static let postprocessTemplateArguments = ["--progress-template", postprocessTemplate]
     private static let structuredPattern = try! NSRegularExpression(pattern: #"^PROG\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)$"#)
+    private static let postprocessPattern = try! NSRegularExpression(pattern: #"^POST\|([^|]*)\|([^|]*)$"#)
     private static let percentPattern = #"\[download\]\s+([\d.]+)%"#
     private static let totalBytesPattern = #"of\s+~?\s*([\d.]+)(KiB|MiB|GiB)"#
     private static let speedPattern = #"at\s+([\d.]+)(KiB|MiB|GiB)/s"#
@@ -70,6 +86,22 @@ struct OutputParser: Sendable {
             totalBytes: total,
             speedBytesPerSecond: speed
         )
+    }
+
+    /// Parses a structured POST line. Returns nil for other lines.
+    func parsePostprocessEvent(line: String) -> PostprocessEvent? {
+        let range = NSRange(line.startIndex..., in: line)
+        guard let match = Self.postprocessPattern.firstMatch(in: line, range: range),
+              match.numberOfRanges >= 3 else { return nil }
+
+        func text(_ group: Int) -> String? {
+            guard let capture = Range(match.range(at: group), in: line) else { return nil }
+            let value = String(line[capture])
+            return value == "NA" ? nil : value
+        }
+
+        guard let status = text(1), ["started", "processing", "finished"].contains(status) else { return nil }
+        return PostprocessEvent(status: status, postprocessor: text(2))
     }
 
     /// Fallback parser for human-readable `[download]  42.5% of ~10.00MiB`

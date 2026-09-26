@@ -25,4 +25,16 @@ final class ConversionArgumentTests: XCTestCase {
     func testQualitySelectorsDeriveFromProfile() {
         XCTAssertNotEqual(QualityProfile.best.formatSelector, QualityProfile.efficient.formatSelector)
     }
+
+    func testThumbnailEmbeddingSupport() {
+        // yt-dlp only embeds thumbnails into these containers.
+        XCTAssertFalse(AudioFormat.wav.supportsEmbeddedThumbnails)
+        XCTAssertFalse(AudioFormat.aiff.supportsEmbeddedThumbnails)
+        XCTAssertTrue(AudioFormat.mp3.supportsEmbeddedThumbnails)
+        XCTAssertTrue(AudioFormat.flac.supportsEmbeddedThumbnails)
+        XCTAssertTrue(VideoFormat.mp4.supportsEmbeddedThumbnails)
+        XCTAssertTrue(VideoFormat.mkv.supportsEmbeddedThumbnails)
+        XCTAssertTrue(VideoFormat.mov.supportsEmbeddedThumbnails)
+        XCTAssertFalse(VideoFormat.avi.supportsEmbeddedThumbnails)
+    }
 }

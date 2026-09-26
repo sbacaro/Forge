@@ -15,6 +15,16 @@ enum VideoFormat: String, CaseIterable, Codable, Identifiable {
 
     var fileExtension: String { rawValue }
 
+    /// Whether yt-dlp can embed a thumbnail into this container.
+    /// Unsupported formats make `--embed-thumbnail` abort the postprocessing
+    /// step and fail the whole download.
+    var supportsEmbeddedThumbnails: Bool {
+        switch self {
+        case .mp4, .mkv, .mov, .webm: true
+        case .avi: false
+        }
+    }
+
     /// ffmpeg muxer/format name for the output container.
     var muxerName: String {
         switch self {
